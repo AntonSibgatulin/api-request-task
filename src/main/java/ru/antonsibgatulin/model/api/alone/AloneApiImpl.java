@@ -24,7 +24,7 @@ public class AloneApiImpl extends ApiRequest implements IApiRequest, IApiRequest
 
 
     @Override
-    public void createDocument(Document document, String signature, IUser iUser) {
+    public  void createDocument(Document document, String signature, IUser iUser) {
         try {
             this.waitForRequestLimit();
         } catch (InterruptedException e) {

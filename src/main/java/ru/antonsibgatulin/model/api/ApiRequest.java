@@ -27,46 +27,59 @@ public abstract class ApiRequest {
     private final String API_URL = "https://ismp.crpt.ru/api/v3/lk/documents/create";
     private final CloseableHttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final Semaphore requestSemaphore;
-    private final Duration requestLimitInterval;
-    private Instant lastRequestTime;
+    private Long lastRequestTime = 0L;
+
+    private long requestLimitInterval;
+
+    private TimeUnit timeUnit;
+    private int requestLimit;
 
     public ApiRequest(TimeUnit timeUnit, int requestLimit) {
+
         this.httpClient = HttpClients.createDefault();
+
         this.objectMapper = new ObjectMapper();
+
         objectMapper.registerModule(new JavaTimeModule());
 
-        this.requestSemaphore = new Semaphore(requestLimit);
 
-        ChronoUnit chronoUnit = TImeUtils.getChronoUnit(timeUnit);
+        this.timeUnit = timeUnit;
+        this.requestLimit = requestLimit;
 
-        this.requestLimitInterval = Duration.of(1, chronoUnit);
+        requestLimitInterval = TImeUtils.getChronoUnit(timeUnit).getDuration().getSeconds() * 1000 / requestLimit;
 
-        lastRequestTime = Instant.now().minus(this.requestLimitInterval);
+
     }
 
 
     public void waitForRequestLimit() throws InterruptedException {
-        Instant now = Instant.now();
-        if (lastRequestTime.plus(getRequestLimitInterval()).isBefore(now)) {
-            lastRequestTime = now;
-            getRequestSemaphore().release();
-        } else {
-            getRequestSemaphore().acquire();
-            lastRequestTime = Instant.now();
+
+        long now = System.currentTimeMillis();
+        synchronized (lastRequestTime) {
+            if (now - lastRequestTime > requestLimitInterval) {
+                lastRequestTime = now;
+            } else {
+                Thread.sleep(requestLimitInterval - (now - lastRequestTime));
+                waitForRequestLimit();
+            }
         }
+
     }
 
+
     protected void doApiRequest(Document document, String signature) {
+        System.out.println(Thread.currentThread().getId() + " started");
         try {
             HttpPost request = new HttpPost(getAPI_URL());
-            request.setEntity(new StringEntity(getJsonDataInString(), StandardCharsets.UTF_8));
+            request.setEntity(new StringEntity(getJsonDataInString(document), StandardCharsets.UTF_8));
             request.setHeader("Content-Type", "application/json");
             request.setHeader("X-Signature", signature);
             try (CloseableHttpResponse response = getHttpClient().execute(request)) {
                 HttpEntity entity = response.getEntity();
                 if (entity != null) {
-                    EntityUtils.consume(entity);
+                    String result = EntityUtils.toString(entity);
+                    System.out.println(result);
+
                 }
             }
         } catch (Exception ignore) {
@@ -74,42 +87,10 @@ public abstract class ApiRequest {
         }
     }
 
-    private String getJsonDataInString() throws JsonProcessingException {
-        return getObjectMapper().writeValueAsString(generateDocument());
+    private String getJsonDataInString(Document document) throws JsonProcessingException {
+        return getObjectMapper().writeValueAsString(document);
     }
 
-    private Document generateDocument() {
-        Document document = new Document();
-        //description
-        document.setDescription(new Description());
-        document.getDescription().setParticipantInn("string");
-        // document
-        document.setDocID("string");
-        document.setDocStatus("string");
-        document.setDocType("LP_INTRODUCE_GOODS");
-        document.setImportRequest(true);
-        document.setOwnerInn("string");
-        document.setParticipantInn("string");
-        document.setProducerInn("string");
-        document.setProductionDate(LocalDate.of(2020, 1, 23));
-        document.setProductionType("string");
-        // product
-        document.setProducts(new Product[]{new Product()});
-        document.getProducts()[0].setCertificateDocument("string");
-        document.getProducts()[0].setCertificateDocumentDate(LocalDate.of(2020, 1, 23));
-        document.getProducts()[0].setCertificateDocumentNumber("string");
-        document.getProducts()[0].setOwnerInn("string");
-        document.getProducts()[0].setProducerInn("string");
-        document.getProducts()[0].setProductionDate(LocalDate.of(2020, 1, 23));
-        document.getProducts()[0].setTnvedCode("string");
-        document.getProducts()[0].setUitCode("string");
-        document.getProducts()[0].setUituCode("string");
-
-        document.setRegDate(LocalDate.of(2020, 1, 23));
-        document.setRegNumber("string");
-        return document;
-
-    }
 
     public String getAPI_URL() {
         return API_URL;
@@ -123,11 +104,7 @@ public abstract class ApiRequest {
         return objectMapper;
     }
 
-    public Semaphore getRequestSemaphore() {
-        return requestSemaphore;
-    }
-
-    public Duration getRequestLimitInterval() {
+    public long getRequestLimitInterval() {
         return requestLimitInterval;
     }
 }

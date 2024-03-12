@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 public class MultiplyApiImpl extends ApiRequest implements IApiRequest {
 
-    private Map<IUser, Instant> lastRequestTimes = new HashMap<>();
+    private Map<String, Long> lastRequestTimes = new HashMap<>();
 
     public MultiplyApiImpl(TimeUnit timeUnit, int requestLimit) {
         super(timeUnit, requestLimit);
@@ -21,24 +21,36 @@ public class MultiplyApiImpl extends ApiRequest implements IApiRequest {
 
 
     public void waitForRequestLimit(IUser iUser) throws InterruptedException {
-        synchronized (iUser.getUser().getId()) {
-            Instant lastRequestTime = lastRequestTimes.get(iUser);
+
+        long now = System.currentTimeMillis();
+        boolean sleep = false;
+
+        String id = iUser.getUser().getId();
+        Long lastRequestTime = null;
+        synchronized (id.intern()) {
+            lastRequestTime = lastRequestTimes.get(id);
             if (lastRequestTime == null) {
-                lastRequestTime = Instant.now().minus(getRequestLimitInterval());
-                lastRequestTimes.put(iUser, lastRequestTime);
+                lastRequestTime = 0L;
+                lastRequestTimes.put(id, lastRequestTime);
+
             }
-            Instant now = Instant.now();
-            if (lastRequestTime.plus(getRequestLimitInterval()).isBefore(now)) {
-                getRequestSemaphore().release();
+            if (now - lastRequestTime > getRequestLimitInterval()) {
+                lastRequestTimes.put(id, now);
             } else {
-                getRequestSemaphore().acquire();
+                sleep = true;
             }
-            lastRequestTimes.put(iUser, now);
+
+        }
+
+        if (sleep) {
+            Thread.sleep(getRequestLimitInterval() - (now - lastRequestTime));
+            waitForRequestLimit();
         }
     }
 
     @Override
     public void createDocument(Document document, String signature, IUser iUser) {
+
         try {
             waitForRequestLimit(iUser);
         } catch (InterruptedException e) {
