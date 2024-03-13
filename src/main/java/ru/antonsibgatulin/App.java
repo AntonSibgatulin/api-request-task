@@ -3,10 +3,13 @@ package ru.antonsibgatulin;
 import ru.antonsibgatulin.entity.description.Description;
 import ru.antonsibgatulin.entity.document.Document;
 import ru.antonsibgatulin.entity.product.Product;
+import ru.antonsibgatulin.entity.user.UserData;
 import ru.antonsibgatulin.model.api.IApiRequest;
 import ru.antonsibgatulin.model.api.IApiRequestAdapter;
 import ru.antonsibgatulin.model.api.alone.AloneApiImpl;
 import ru.antonsibgatulin.model.api.multiply.MultiplyApiImpl;
+import ru.antonsibgatulin.model.user.IUser;
+import ru.antonsibgatulin.model.user.UserImpl;
 
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -20,10 +23,16 @@ public class App {
     public static void main(String[] args) {
 
         IApiRequestAdapter alone = new AloneApiImpl(TimeUnit.SECONDS, 5);
-
-        
         IApiRequest multiply = new MultiplyApiImpl(TimeUnit.SECONDS, 5);
 
+        alone.createDocument(App.generateTestDocument(), "signature");
+
+
+        IUser iUser = new UserImpl();
+        UserData userData = new UserData(String.valueOf(1));
+        iUser.setUserData(userData);
+
+        multiply.createDocument(App.generateTestDocument(), "signature", iUser);
     }
 
     public static Document generateTestDocument() {
